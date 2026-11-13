@@ -76,6 +76,7 @@ func tick(dt: float) -> void:
 	working = true
 	status = "Smelting %s" % GameData.item_name(recipe_id)
 	anim_time += dt
+	wear(dt * eff)
 	progress += dt * eff * def["speed"] / rec["time"]
 	if progress >= 1.0:
 		output_item = recipe_id
@@ -100,6 +101,10 @@ func _try_start() -> void:
 		input_item = &""
 	recipe_id = r
 	progress = 0.0
+
+
+func _on_broken() -> void:
+	working = false
 
 
 func status_icon() -> String:

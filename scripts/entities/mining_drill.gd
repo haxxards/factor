@@ -56,6 +56,7 @@ func tick(dt: float) -> void:
 	working = true
 	status = "Mining"
 	anim_time += dt * eff
+	wear(dt * eff)
 	progress += def["mining_speed"] * dt * eff
 	if progress >= 1.0:
 		progress -= 1.0
@@ -117,6 +118,10 @@ func take(item: StringName) -> bool:
 		return false
 	output.remove_at(i)
 	return true
+
+
+func _on_broken() -> void:
+	working = false
 
 
 func status_icon() -> String:

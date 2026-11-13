@@ -14,6 +14,15 @@ var inventory := Inventory.new(60)
 ## crafts (give = false) were already accounted for when the order was queued.
 var craft_queue: Array[Dictionary] = []
 var facing := Vector2.UP
+## Health left in the Repair Kit currently being used up.
+var kit_health := 0.0
+## Health fractions of damaged buildings sitting in the inventory, per item, so
+## picking a machine up and putting it back down doesn't repair it for free.
+var worn: Dictionary = {}  ## StringName -> Array of float
+
+
+func _ready() -> void:
+	inventory.changed.connect(_trim_worn)
 
 
 func _physics_process(delta: float) -> void:
@@ -103,6 +112,54 @@ func _plan(recipe: StringName, inv: Dictionary, plan: Array, depth: int) -> bool
 	plan.append({"recipe": recipe, "left": rec["time"], "give": true})
 	inv[recipe] = inv.get(recipe, 0) + rec["count"]
 	return true
+
+
+# --- Repairing ---------------------------------------------------------------
+
+## Repairs `b` for `delta` seconds, using up Repair Kits from the inventory.
+## Returns the health restored (0 when out of kits or nothing to repair).
+func repair(b: Building, delta: float) -> float:
+	if not b.is_damaged():
+		return 0.0
+	if kit_health <= 0.0:
+		if inventory.remove(&"repair_kit", 1) == 0:
+			return 0.0
+		kit_health = GameData.ITEMS[&"repair_kit"]["repair"]
+	var restored := b.repair(minf(GameData.REPAIR_RATE * delta, kit_health))
+	kit_health -= restored
+	if restored > 0.0:
+		GameData.add_stat(&"repaired_hp", restored)
+	return restored
+
+
+## Repair health available: the kit in use plus the kits in the inventory.
+func repair_health_left() -> float:
+	return kit_health + inventory.count(&"repair_kit") * GameData.ITEMS[&"repair_kit"]["repair"]
+
+
+## Remembers that a damaged `id` went into the inventory.
+func add_worn(id: StringName, fraction: float) -> void:
+	if not worn.has(id):
+		worn[id] = []
+	worn[id].append(fraction)
+
+
+## Health fraction for the next `id` placed: a damaged copy if there is one, else 1.
+func take_worn(id: StringName) -> float:
+	if worn.has(id) and not worn[id].is_empty():
+		return worn[id].pop_front()
+	return 1.0
+
+
+func worn_count(id: StringName) -> int:
+	return worn[id].size() if worn.has(id) else 0
+
+
+## Forgets damaged copies that left the inventory some other way.
+func _trim_worn() -> void:
+	for id in worn:
+		while worn[id].size() > inventory.count(id):
+			worn[id].pop_back()
 
 
 func process_crafting(delta: float) -> void:

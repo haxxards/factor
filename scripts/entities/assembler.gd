@@ -81,6 +81,7 @@ func tick(dt: float) -> void:
 		return
 	status = "Crafting"
 	anim_time += dt * power_satisfaction
+	wear(dt * power_satisfaction)
 	progress += dt * def["speed"] * power_satisfaction / rec["time"]
 	if progress >= 1.0:
 		output_count += rec["count"]
@@ -160,7 +161,7 @@ func ui_lines() -> PackedStringArray:
 func _draw_overlay() -> void:
 	if recipe_id == &"":
 		return
-	if crafting and power_satisfaction > 0.0:
+	if crafting and power_satisfaction > 0.0 and not is_broken():
 		_draw_spinner(Vector2(-1, -1), 17.0, 6, Color(0.55, 0.58, 0.5), 2.0)
 	draw_circle(Vector2(-1, -1), 13.0, Color(0.14, 0.15, 0.14))
 	draw_texture_rect(GameData.icon(recipe_id), Rect2(Vector2(-13, -13), Vector2(24, 24)), false)

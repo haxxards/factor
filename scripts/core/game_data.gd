@@ -8,6 +8,12 @@ const TILE := 32
 const DIR_VEC := [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 const DIR_NAMES := ["North", "East", "South", "West"]
 
+## Seconds of continuous work that wear a machine from full health to broken.
+## Set to 0 to turn wear off.
+const WEAR_SECONDS := 1800.0
+## Health restored per second while repairing.
+const REPAIR_RATE := 60.0
+
 ## Every item in the game. Items with "building" place the building of the same id.
 const ITEMS := {
 	# Raw resources
@@ -22,6 +28,9 @@ const ITEMS := {
 	&"iron_gear": {"name": "Iron Gear", "stack": 100, "desc": "Mechanical component."},
 	&"copper_wire": {"name": "Copper Wire", "stack": 200, "desc": "Used in circuits and power poles."},
 	&"circuit": {"name": "Circuit Board", "stack": 200, "desc": "Electronics for machines and inserters."},
+	# Tools
+	&"repair_kit": {"name": "Repair Kit", "stack": 50, "tool": true, "repair": 200.0,
+		"desc": "Restores 200 health. Hold it (F) and hold left mouse on a worn machine."},
 	# Buildings
 	&"belt": {"name": "Conveyor Belt", "stack": 100, "building": true,
 		"desc": "Moves items in the direction of its arrows. Hold the mouse to drag a line."},
@@ -60,6 +69,7 @@ const RECIPES := {
 	&"iron_gear": {"in": {&"iron_plate": 2}, "count": 1, "time": 0.5},
 	&"copper_wire": {"in": {&"copper_plate": 1}, "count": 2, "time": 0.5},
 	&"circuit": {"in": {&"iron_plate": 1, &"copper_wire": 3}, "count": 1, "time": 0.5},
+	&"repair_kit": {"in": {&"circuit": 1, &"iron_gear": 2}, "count": 1, "time": 1.0},
 	&"belt": {"in": {&"iron_plate": 1, &"iron_gear": 1}, "count": 2, "time": 0.5},
 	&"inserter": {"in": {&"circuit": 1, &"iron_gear": 1, &"iron_plate": 1}, "count": 1, "time": 0.5},
 	&"burner_drill": {"in": {&"iron_gear": 3, &"iron_plate": 3, &"stone": 5}, "count": 1, "time": 2.0},
@@ -78,35 +88,37 @@ const _ENTITY_DIR := "res://scripts/entities/"
 
 ## Building definitions. Sizes are for the north-facing orientation.
 ## power/drain: electric draw in W while working / idle. fuel_power: burner draw in W.
+## health: hit points. wears: loses health while working (see WEAR_SECONDS).
 const BUILDINGS := {
-	&"belt": {"script": _ENTITY_DIR + "belt.gd", "size": Vector2i(1, 1), "rotatable": true, "z": 0},
+	&"belt": {"script": _ENTITY_DIR + "belt.gd", "size": Vector2i(1, 1), "rotatable": true, "z": 0, "health": 50.0},
 	&"inserter": {"script": _ENTITY_DIR + "inserter.gd", "size": Vector2i(1, 1), "rotatable": true, "z": 3,
-		"power": 13000.0, "drain": 400.0},
+		"power": 13000.0, "drain": 400.0, "health": 80.0},
 	&"burner_drill": {"script": _ENTITY_DIR + "mining_drill.gd", "size": Vector2i(2, 2), "rotatable": true,
-		"solid": true, "fuel_power": 150000.0, "mining_speed": 0.25, "area_margin": 0,
+		"solid": true, "fuel_power": 150000.0, "mining_speed": 0.25, "area_margin": 0, "health": 150.0, "wears": true,
 		"output": Vector2i(0, -1), "head": Vector2(0, 2)},
 	&"electric_drill": {"script": _ENTITY_DIR + "mining_drill.gd", "size": Vector2i(3, 3), "rotatable": true,
-		"solid": true, "power": 90000.0, "drain": 3000.0, "mining_speed": 0.5, "area_margin": 1,
+		"solid": true, "power": 90000.0, "drain": 3000.0, "mining_speed": 0.5, "area_margin": 1, "health": 300.0, "wears": true,
 		"output": Vector2i(1, -1), "head": Vector2(0, 2)},
 	&"furnace": {"script": _ENTITY_DIR + "furnace.gd", "size": Vector2i(2, 2), "solid": true,
-		"fuel_power": 90000.0, "speed": 1.0},
+		"fuel_power": 90000.0, "speed": 1.0, "health": 200.0, "wears": true},
 	&"assembler": {"script": _ENTITY_DIR + "assembler.gd", "size": Vector2i(3, 3), "solid": true,
-		"power": 75000.0, "drain": 2500.0, "speed": 0.75},
-	&"chest": {"script": _ENTITY_DIR + "chest.gd", "size": Vector2i(1, 1), "slots": 16},
-	&"pipe": {"script": _ENTITY_DIR + "pipe.gd", "size": Vector2i(1, 1), "z": 0},
+		"power": 75000.0, "drain": 2500.0, "speed": 0.75, "health": 300.0, "wears": true},
+	&"chest": {"script": _ENTITY_DIR + "chest.gd", "size": Vector2i(1, 1), "slots": 16, "health": 150.0},
+	&"pipe": {"script": _ENTITY_DIR + "pipe.gd", "size": Vector2i(1, 1), "z": 0, "health": 100.0},
 	&"pump": {"script": _ENTITY_DIR + "offshore_pump.gd", "size": Vector2i(1, 1), "rotatable": true,
-		"rate": 1200.0, "needs_water_behind": true},
+		"rate": 1200.0, "needs_water_behind": true, "health": 150.0, "wears": true},
 	&"boiler": {"script": _ENTITY_DIR + "boiler.gd", "size": Vector2i(3, 2), "rotatable": true, "solid": true,
-		"fuel_power": 1.8e6, "steam_rate": 60.0},
+		"fuel_power": 1.8e6, "steam_rate": 60.0, "health": 250.0, "wears": true},
 	&"steam_engine": {"script": _ENTITY_DIR + "steam_engine.gd", "size": Vector2i(3, 3), "rotatable": true,
-		"solid": true, "max_power": 900000.0, "steam_rate": 30.0},
+		"solid": true, "max_power": 900000.0, "steam_rate": 30.0, "health": 400.0, "wears": true},
 	&"pole": {"script": _ENTITY_DIR + "power_pole.gd", "size": Vector2i(1, 1), "z": 5,
-		"supply": 3, "reach": 8.0, "sprite_offset": Vector2(0, -12)},
+		"supply": 3, "reach": 8.0, "sprite_offset": Vector2(0, -12), "health": 100.0},
 }
 
-## Order of the hotbar (keys 1-0, -, =).
+## Order of the hotbar (keys 1-0, -, =, F).
 const HOTBAR := [&"belt", &"inserter", &"burner_drill", &"electric_drill", &"furnace", &"chest",
-	&"pole", &"pipe", &"pump", &"boiler", &"steam_engine", &"assembler"]
+	&"pole", &"pipe", &"pump", &"boiler", &"steam_engine", &"assembler", &"repair_kit"]
+const HOTBAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "F"]
 
 const OBJECTIVES := [
 	{"text": "Mine 10 ore by hand (hold right mouse)", "stat": &"hand_mined", "goal": 10},
@@ -115,6 +127,7 @@ const OBJECTIVES := [
 	{"text": "Generate 5 MJ of electricity", "stat": &"energy_mj", "goal": 5},
 	{"text": "Assemble 20 Iron Gears", "stat": &"assembled:iron_gear", "goal": 20},
 	{"text": "Assemble 10 Circuit Boards", "stat": &"assembled:circuit", "goal": 10},
+	{"text": "Repair 100 health of wear (Repair Kit, F)", "stat": &"repaired_hp", "goal": 100},
 ]
 
 var stats: Dictionary = {}
@@ -162,6 +175,11 @@ func fuel_value(id: StringName) -> float:
 
 func is_building_item(id: StringName) -> bool:
 	return BUILDINGS.has(id)
+
+
+## Items that are used from the hand rather than placed (the repair kit).
+func is_tool(id: StringName) -> bool:
+	return ITEMS.has(id) and ITEMS[id].get("tool", false)
 
 
 func is_handcraftable(id: StringName) -> bool:
@@ -274,7 +292,7 @@ func _setup_input() -> void:
 	_bind(&"help", [KEY_H, KEY_F1])
 	_bind(&"close", [KEY_ESCAPE])
 	_bind(&"cheat", [KEY_F9])
-	var keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0, KEY_MINUS, KEY_EQUAL]
+	var keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0, KEY_MINUS, KEY_EQUAL, KEY_F]
 	for i in keys.size():
 		_bind(StringName("hotbar_%d" % i), [keys[i]])
 

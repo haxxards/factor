@@ -15,6 +15,7 @@ func _ready() -> void:
 	_test_inserter_furnace_chest()
 	_test_fluid_conflict()
 	_test_handcrafting()
+	_test_wear_and_repair()
 	_test_demo_factory()
 	print("")
 	if _failures == 0:
@@ -171,6 +172,51 @@ func _test_handcrafting() -> void:
 	w.queue_free()
 
 
+func _test_wear_and_repair() -> void:
+	print("Wear and repair")
+	var w := _flat_world()
+	var furnace := w.place(&"furnace", Vector2i(10, 10), 0) as Furnace
+	furnace.ui_insert(&"iron_ore", 50)
+	furnace.ui_insert(&"coal", 20)
+	furnace.health = furnace.max_health() * 0.01  # about 18 s of work left
+	_run(w, 30.0)
+	_check(furnace.is_broken(), "a working machine wears down and breaks")
+	var plates := furnace.output_count
+	var coal := furnace.burner.count
+	_run(w, 10.0)
+	_check(furnace.output_count == plates and furnace.burner.count == coal, "a broken machine stops and burns no fuel")
+	_check(furnace.current_icon() == "repair", "a worn machine shows the repair icon")
+
+	var p := Player.new()
+	p.world = w
+	add_child(p)
+	_check(p.repair(furnace, 1.0) == 0.0, "nothing is repaired without kits")
+	p.inventory.add(&"repair_kit", 2)
+	for i in 600:
+		p.repair(furnace, DT)
+	_check(not furnace.is_damaged(), "holding repair restores full health")
+	_check(p.inventory.count(&"repair_kit") == 1, "a 200-health furnace used exactly one 200-health kit")
+	_run(w, 5.0)
+	_check(furnace.output_count > plates, "the repaired furnace smelts again")
+	var belt := w.place(&"belt", Vector2i(20, 20), 0)
+	belt.wear(10000.0)
+	_check(not belt.is_damaged(), "belts don't wear")
+
+	p.inventory.add(&"iron_plate", 5)
+	p.inventory.add(&"copper_plate", 2)
+	_check(p.craftable_count(&"repair_kit") == 1, "a kit is hand-craftable from 5 iron + 2 copper plates")
+
+	p.inventory.add(&"furnace", 2)
+	p.add_worn(&"furnace", 0.4)
+	_check(is_equal_approx(p.take_worn(&"furnace"), 0.4) and p.take_worn(&"furnace") == 1.0,
+		"a picked-up damaged furnace goes back down damaged")
+	p.add_worn(&"furnace", 0.3)
+	p.inventory.remove(&"furnace", 2)
+	_check(p.worn_count(&"furnace") == 0, "the damage record is dropped once the item leaves the inventory")
+	p.queue_free()
+	w.queue_free()
+
+
 func _test_demo_factory() -> void:
 	print("Demo factory (2 simulated minutes)")
 	var w := World.new()
@@ -198,4 +244,16 @@ func _test_demo_factory() -> void:
 		plates += 1 if (w.get_building(Vector2i(x, 41)) as Furnace).burner.has_fuel() else 0
 	_check(plates == 3, "all iron furnaces still have fuel")
 	_check(GameData.stat(&"made:iron_plate") > 40, "iron plates smelted (%d)" % GameData.stat(&"made:iron_plate"))
+	var drill := w.get_building(Vector2i(82, 49)) as MiningDrill
+	_check(drill.health_fraction() < 0.12 and not drill.is_broken(), "the pre-worn copper drill wears further (%d%%)" % roundi(drill.health_fraction() * 100.0))
+
+	var engines: Array[Building] = [w.get_building(Vector2i(61, 55)), w.get_building(Vector2i(61, 52))]
+	for e in engines:
+		e.health = 0.0
+	_run(w, 1.0)
+	_check(net.production == 0.0 and net.satisfaction == 0.0, "broken steam engines produce no power")
+	for e in engines:
+		e.repair(e.max_health())
+	_run(w, 1.0)
+	_check(net.satisfaction > 0.99, "repaired engines power the factory again")
 	w.queue_free()

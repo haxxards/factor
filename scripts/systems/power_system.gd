@@ -76,15 +76,18 @@ func update(dt: float) -> void:
 	for net in networks:
 		var demand := 0.0
 		for c in net.consumers:
-			demand += c.get_power_demand()
+			# Broken machines only draw their idle drain.
+			demand += c.def.get("drain", 0.0) if c.is_broken() else c.get_power_demand()
 		var capacity := 0.0
 		for g in net.generators:
-			capacity += g.available_power(dt)
+			if not g.is_broken():
+				capacity += g.available_power(dt)
 		var produced := 0.0  # joules this tick
 		if demand > 0.0 and capacity > 0.0:
 			var share := minf(1.0, demand / capacity)
 			for g in net.generators:
-				produced += g.generate(g.available_power(dt) * share * dt)
+				if not g.is_broken():
+					produced += g.generate(g.available_power(dt) * share * dt)
 		if demand > 0.0:
 			net.satisfaction = clampf(produced / (demand * dt), 0.0, 1.0)
 		else:

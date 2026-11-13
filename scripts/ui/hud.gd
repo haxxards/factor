@@ -230,13 +230,12 @@ func _build_hotbar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	p.add_child(row)
-	var keys := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
 	for i in GameData.HOTBAR.size():
 		var id: StringName = GameData.HOTBAR[i]
 		var b := _item_button(id, 0, 52)
 		b.toggle_mode = true
 		b.pressed.connect(game.select_hotbar.bind(i))
-		var key := _label(keys[i], 11, Color(1, 1, 1, 0.6))
+		var key := _label(GameData.HOTBAR_KEYS[i], 11, Color(1, 1, 1, 0.6))
 		key.position = Vector2(4, 1)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(key)
@@ -320,7 +319,7 @@ func _build_help() -> void:
 	var text := _rich(640)
 	text.text = """[b]Controls[/b]
 WASD / arrows - walk          Mouse wheel - zoom
-1-0, -, = - pick a building from the hotbar (or click it)
+1-0, -, = - pick a building from the hotbar (or click it)      F - hold a Repair Kit
 Left click - place (hold and drag for belt lines) / open a building
 Right click (hold) - mine ore by hand, or pick a building back up
 R / Shift+R - rotate the held building (or the hovered one)
@@ -334,6 +333,9 @@ E - inventory and hand crafting        Esc - close windows / empty hand
 4. Power: [color=#7fb8ff]Water Pump[/color] (on the shore, water behind) -> pipe -> [color=#7fb8ff]Boiler[/color] (water in at the sides, steam out the front) -> [color=#7fb8ff]Steam Engines[/color] -> [color=#7fb8ff]Power Poles[/color]. Feed the boiler coal.
 5. Electric machines must sit inside a pole's blue supply area. Poles wire up automatically.
 6. Give an [color=#f5c060]Assembler[/color] a recipe and feed it with inserters to automate gears and circuits.
+
+7. Machines wear out while they work (health bar underneath). At 0 they stop. Craft [color=#f5c060]Repair Kits[/color]
+   (1 circuit + 2 gears), hold one with F and hold left mouse on the machine to repair it.
 
 Tip: hover anything to see what it is doing in the top-left panel."""
 	v.add_child(text)
@@ -471,7 +473,7 @@ func _on_insert_pressed(item: StringName) -> void:
 
 
 func _on_inventory_item_pressed(item: StringName) -> void:
-	if GameData.is_building_item(item):
+	if GameData.is_building_item(item) or GameData.is_tool(item):
 		game.set_hand(item)
 
 
@@ -529,6 +531,9 @@ func _update_info() -> void:
 	var b := w.get_building(c)
 	if b:
 		lines.append("[b][color=#f5c060]%s[/color][/b]" % b.display_name())
+		var hl := b.health_line()
+		if hl != "":
+			lines.append("[color=#ff6655]%s[/color]" % hl if b.is_broken() else hl)
 		for l in b.ui_lines():
 			if l != "":
 				lines.append(l)
@@ -540,11 +545,19 @@ func _update_info() -> void:
 		lines.append("[b]Water[/b]")
 	else:
 		lines.append("[b]Ground[/b]")
-	if game.hand_item != &"":
+	if game.holding_tool():
+		lines.append("")
+		lines.append("Holding [color=#f5c060]Repair Kit[/color] x%d  (%d health of repairs left)" % [
+			game.player.inventory.count(game.hand_item), floori(game.player.repair_health_left())])
+		lines.append("[color=#888]Hold left mouse on a worn machine to repair it[/color]")
+	elif game.is_placing():
 		lines.append("")
 		lines.append("Holding [color=#f5c060]%s[/color] x%d, facing %s (R rotates)" % [
 			GameData.item_name(game.hand_item), game.player.inventory.count(game.hand_item),
 			GameData.DIR_NAMES[game.hand_dir]])
+		var damaged := game.player.worn_count(game.hand_item)
+		if damaged > 0:
+			lines.append("[color=#e0a040]%d of these are damaged and are placed first[/color]" % damaged)
 		var problem := game.placement_problem(game.hand_origin())
 		if problem != "":
 			lines.append("[color=#ff7766]%s[/color]" % problem)
@@ -619,6 +632,8 @@ func _refresh_building() -> void:
 	var b := building_target
 	bw_title.text = b.display_name()
 	var lines := PackedStringArray()
+	if b.health_line() != "":
+		lines.append(b.health_line())
 	for l in b.ui_lines():
 		if l != "":
 			lines.append(l)

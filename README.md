@@ -38,11 +38,12 @@ smallest set that still covers the full mine → belt → smelt → assemble →
 | Steam Engine | 3×3 | – | Turns 30 steam/s into up to 900 kW. Ports at both ends let engines chain. |
 | Power Pole | 1×1 | – | Powers a 7×7 area and wires itself to poles within 8 tiles. |
 
-### Items (10 materials, plus the buildings above)
+### Items (10 materials and 1 tool, plus the buildings above)
 
 - **Raw:** Iron Ore, Copper Ore, Coal (fuel, 4 MJ), Stone
 - **Smelted:** Iron Plate, Copper Plate, Stone Brick
 - **Intermediate:** Iron Gear, Copper Wire, Circuit Board
+- **Tool:** Repair Kit (1 Circuit Board + 2 Iron Gears, 1 s). Each kit restores 200 health.
 
 All recipes are in `scripts/core/game_data.gd`. For example: belts use a plate and a gear, inserters
 use a circuit, a gear and a plate, and boilers need stone bricks, so you have to smelt stone.
@@ -68,6 +69,14 @@ use a circuit, a gear and a plate, and boilers need stone bricks, so you have to
 - **Crafting:** Hand-crafting fills in missing intermediates for you. For example, crafting
   belts also crafts the gears they need. You get a crafting queue, and assemblers can run any
   hand recipe.
+- **Wear and repair:** Drills, furnaces, assemblers, pumps, boilers and steam engines lose
+  health while they work, and go from full to broken in 30 minutes of continuous work. A health
+  bar appears below 75%, a wrench icon blinks below 25%, and at 0 the machine stops. Hold a
+  Repair Kit (F) and hold left mouse on the machine to repair it at 60 health per second.
+  Belts, inserters, poles, pipes and chests don't wear. A machine you pick up while damaged
+  stays damaged when you place it again, so picking it up isn't a free repair. In the demo, the
+  copper burner drill starts nearly worn out and breaks after a few minutes. Set `WEAR_SECONDS`
+  in `game_data.gd` to change the wear rate, or to 0 to turn wear off.
 - **Feedback:** Machines blink an icon when they are out of fuel, power or ingredients. Hover
   over anything to see its status, and use the objectives panel to follow the progression.
 
@@ -78,14 +87,15 @@ use a circuit, a gear and a plate, and boilers need stone bricks, so you have to
 | WASD / arrow keys | Walk |
 | Mouse wheel | Zoom |
 | 1 – 0, `-`, `=` | Pick a building from the hotbar |
-| Left click | Place (hold and drag to lay a belt line) / open a building |
+| F | Hold a Repair Kit |
+| Left click | Place (hold and drag to lay a belt line) / open a building. With a Repair Kit, hold to repair |
 | Right click (hold) | Mine ore by hand, or pick up a building along with its contents |
 | R / Shift+R | Rotate the held building, or the hovered one |
 | Q | Copy the hovered building into your hand / empty your hand |
 | E or Tab | Inventory and hand crafting (click = 1, Shift+click = 5) |
 | H or F1 | Help |
 | Esc | Close windows / empty your hand |
-| F9 | Sandbox: add 20 of every building |
+| F9 | Sandbox: add 20 of every building and Repair Kit |
 
 ## Project layout
 
@@ -117,8 +127,9 @@ script in `scripts/entities/` that extends `Building`, and add a sprite.
 ## Tests
 
 The simulation runs headless. It is covered by tests for belts (movement, compression, curves,
-side-loading), inserter → furnace → chest chains, fluid rules and recursive hand crafting. There is
-also a 2-minute run of the demo factory that checks power, fuel, gears and circuits.
+side-loading), inserter → furnace → chest chains, fluid rules, recursive hand crafting, and wear
+and repair. There is also a 2-minute run of the demo factory that checks power, fuel, gears and
+circuits.
 
 ```bash
 godot --headless --path . --import

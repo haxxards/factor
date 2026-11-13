@@ -44,6 +44,7 @@ func tick(dt: float) -> void:
 	steam.add(&"steam", made)
 	produced = made / dt
 	anim_time += dt
+	wear(made / def["steam_rate"])
 	status = "Producing steam"
 	queue_redraw()
 
@@ -58,6 +59,10 @@ func accept(item: StringName) -> bool:
 
 func insert_priority(item: StringName) -> int:
 	return 1 if GameData.is_fuel(item) and burner.count == 0 else 0
+
+
+func _on_broken() -> void:
+	produced = 0.0
 
 
 func status_icon() -> String:

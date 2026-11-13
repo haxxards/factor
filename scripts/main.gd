@@ -12,7 +12,8 @@ const ZOOM_MAX := 3.0
 const STARTER_KIT := {&"burner_drill": 2, &"furnace": 2, &"coal": 10, &"iron_plate": 20}
 const DEMO_KIT := {&"belt": 100, &"inserter": 20, &"pole": 10, &"burner_drill": 4, &"electric_drill": 4,
 	&"furnace": 6, &"assembler": 3, &"chest": 6, &"pipe": 20, &"pump": 1, &"boiler": 1, &"steam_engine": 2,
-	&"coal": 50, &"iron_plate": 100, &"copper_plate": 50, &"stone": 50, &"iron_gear": 20, &"circuit": 20}
+	&"coal": 50, &"iron_plate": 100, &"copper_plate": 50, &"stone": 50, &"iron_gear": 20, &"circuit": 20,
+	&"repair_kit": 10}
 
 var world: World
 var player: Player
@@ -21,15 +22,17 @@ var hud: Hud
 var preview: BuildPreview
 
 var started := false
-var hand_item: StringName = &""  ## item held for placing, &"" for an empty hand
+var hand_item: StringName = &""  ## building or tool in the hand, &"" for an empty hand
 var hand_dir := 0
 var mouse_cell := Vector2i.ZERO
 var mine_target := World.NO_CELL
 var mine_progress := 0.0  ## 0..1 for the current hand-mining action
+var repair_target: Building = null  ## building being repaired this frame
 
 var _drag_placing := false
 var _last_drag_origin := World.NO_CELL
 var _mining := false
+var _repairing := false
 
 
 func _ready() -> void:
@@ -123,14 +126,18 @@ func _process(delta: float) -> void:
 	mouse_cell = World.world_to_cell(get_global_mouse_position())
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		_drag_placing = false
+		_repairing = false
+		repair_target = null
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		_mining = false
 		mine_progress = 0.0
 		mine_target = World.NO_CELL
-	if _drag_placing and hand_item != &"":
+	if _drag_placing and is_placing():
 		var origin := hand_origin()
 		if origin != _last_drag_origin:
 			_try_place(origin, false)
+	if _repairing:
+		_update_repair(delta)
 	if _mining:
 		_update_mining(delta)
 
@@ -148,11 +155,20 @@ func select_hotbar(i: int) -> void:
 
 
 func set_hand(id: StringName) -> void:
-	if id != &"" and not GameData.is_building_item(id):
+	if id != &"" and not (GameData.is_building_item(id) or GameData.is_tool(id)):
 		return
 	hand_item = id
 	if id != &"" and player.inventory.count(id) <= 0:
 		hud.toast("No %s in inventory - craft some first (E)" % GameData.item_name(id))
+
+
+## True while holding a building to place (as opposed to a tool or nothing).
+func is_placing() -> bool:
+	return hand_item != &"" and GameData.is_building_item(hand_item)
+
+
+func holding_tool() -> bool:
+	return hand_item != &"" and GameData.is_tool(hand_item)
 
 
 ## Top-left cell of the held building, centred under the mouse.
@@ -161,7 +177,10 @@ func hand_origin() -> Vector2i:
 
 
 func _on_left_click() -> void:
-	if hand_item != &"":
+	if holding_tool():
+		_repairing = true
+		return
+	if is_placing():
 		_try_place(hand_origin(), true)
 		_drag_placing = true
 		return
@@ -197,12 +216,15 @@ func _try_place(origin: Vector2i, verbose: bool) -> void:
 		if verbose:
 			hud.toast(problem)
 		return
-	if world.place(hand_item, origin, hand_dir):
+	var b := world.place(hand_item, origin, hand_dir)
+	if b:
+		# A machine that was picked up damaged goes back down damaged.
+		b.health = b.max_health() * player.take_worn(hand_item)
 		player.inventory.remove(hand_item, 1)
 
 
 func _rotate(steps: int) -> void:
-	if hand_item != &"":
+	if is_placing():
 		hand_dir = posmod(hand_dir + steps, 4)
 		return
 	var b := world.get_building(mouse_cell)
@@ -250,8 +272,28 @@ func _update_mining(delta: float) -> void:
 	GameData.add_stat(&"hand_mined")
 
 
+# --- Repairing ---------------------------------------------------------------
+
+func _update_repair(delta: float) -> void:
+	repair_target = null
+	var b := world.get_building(mouse_cell)
+	if b == null or not b.is_damaged():
+		return
+	if not player.in_reach(World.cell_center(mouse_cell)):
+		hud.toast("Out of reach")
+		return
+	if player.repair_health_left() <= 0.0:
+		hud.toast("Out of Repair Kits - craft some (E)")
+		_repairing = false
+		return
+	repair_target = b
+	player.repair(b, delta)
+
+
 ## Removes a building and returns it (and everything inside it) to the inventory.
 func pick_up(b: Building) -> void:
+	if b.is_damaged():
+		player.add_worn(b.id, b.health_fraction())
 	var items := b.contents()
 	items[b.id] = items.get(b.id, 0) + 1
 	for k in items:

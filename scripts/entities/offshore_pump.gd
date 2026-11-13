@@ -20,7 +20,12 @@ func fluid_connections() -> Array:
 
 func tick(dt: float) -> void:
 	pumped = box.add(&"water", def["rate"] * dt) / dt
+	wear(dt * pumped / def["rate"])
 	status = "Pumping" if pumped > 0.0 else "Output full / not connected"
+
+
+func _on_broken() -> void:
+	pumped = 0.0
 
 
 func ui_lines() -> PackedStringArray:

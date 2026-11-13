@@ -593,8 +593,33 @@ def player():
     return img
 
 
+def wrench(d, x0, y0, x1, y1, col, width=2):
+    """Diagonal wrench from (x0, y0) handle end to (x1, y1) jaw end."""
+    d.line([(x0, y0), (x1, y1)], fill=rgba(col), width=width)
+    r = width + 1
+    d.ellipse([x1 - r, y1 - r, x1 + r, y1 + r], fill=rgba(col))
+    d.rectangle([x1, y1 - 1, x1 + 1, y1], fill=(0, 0, 0, 0))  # open jaw
+    d.ellipse([x0 - 1, y0 - 1, x0 + 1, y0 + 1], fill=rgba(col))
+
+
+def repair_kit_icon():
+    img, d = canvas(T, T)
+    red = (190, 58, 46)
+    d.arc([10, 4, 21, 14], 180, 360, fill=OUTLINE, width=3)
+    d.arc([11, 5, 20, 13], 180, 360, fill=rgba(METAL_LIGHT), width=1)
+    box(d, 4, 9, 27, 26, red)
+    d.line([(5, 15), (26, 15)], fill=shade(red, -0.4))
+    box(d, 13, 13, 18, 17, (220, 176, 60), bevel=1)
+    wrench(d, 9, 25, 24, 10, (200, 204, 212), width=2)
+    return img
+
+
 def status_icon(kind):
     img, d = canvas(16, 16)
+    if kind == "repair":
+        disc(d, 8, 8, 7, (220, 140, 30))
+        wrench(d, 4, 12, 11, 5, (255, 255, 255), width=1)
+        return img
     disc(d, 8, 8, 7, (190, 40, 36))
     if kind == "no_power":
         d.polygon([(9, 2), (4, 9), (8, 9), (6, 14), (12, 6), (8, 6)], fill=(255, 220, 60, 255))
@@ -622,6 +647,7 @@ def main():
     save(gear_icon(), ICO, "iron_gear")
     save(wire_icon(), ICO, "copper_wire")
     save(circuit_icon(), ICO, "circuit")
+    save(repair_kit_icon(), ICO, "repair_kit")
 
     strip = belt_frames()
     save(strip, SPR, "belt_straight")
@@ -653,7 +679,7 @@ def main():
         if name != "player":
             save(fit_icon(img), ICO, name)
 
-    for kind in ("no_power", "no_fuel", "no_input"):
+    for kind in ("no_power", "no_fuel", "no_input", "repair"):
         save(status_icon(kind), SPR, "status_" + kind)
     print("Sprites written to", SPR, "and", ICO)
 

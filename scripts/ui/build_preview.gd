@@ -18,9 +18,11 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if not game.started:
 		return
-	if game.hand_item != &"":
+	if game.is_placing():
 		_draw_grid()
 		_draw_ghost()
+	elif game.holding_tool():
+		_draw_repair()
 	else:
 		_draw_hover()
 	_draw_mining()
@@ -118,6 +120,26 @@ func _draw_hover() -> void:
 		_mark_cell((b as MiningDrill).output_cell(), Color(1.0, 0.75, 0.3, 0.8))
 	elif b is PowerPole:
 		_fill_cells((b as PowerPole).supply_rect(), Color(0.35, 0.65, 1.0, 0.15))
+
+
+## With a Repair Kit in hand: mark every worn machine on screen, and the target.
+func _draw_repair() -> void:
+	var view := game.world.visible_cells()
+	for b in game.world.buildings:
+		if b.needs_repair() and view.has_point(b.cell):
+			var r := Rect2(Vector2(b.cell * World.TILE), Vector2(b.size * World.TILE))
+			_corners(r, Color(1.0, 0.6, 0.2, 0.55))
+	var hovered := game.world.get_building(game.mouse_cell)
+	if hovered == null:
+		return
+	var rect := Rect2(Vector2(hovered.cell * World.TILE), Vector2(hovered.size * World.TILE))
+	var color := Color(0.45, 1.0, 0.5, 0.9) if hovered.is_damaged() else Color(1, 1, 1, 0.5)
+	_corners(rect, color)
+	if game.repair_target == hovered:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+		draw_rect(rect, Color(0.45, 1.0, 0.5, 0.12 + 0.1 * pulse))
+		var c := rect.get_center()
+		draw_arc(c, 14.0, -PI * 0.5, -PI * 0.5 + TAU * hovered.health_fraction(), 32, Color(0.45, 1.0, 0.5), 3.0)
 
 
 func _draw_mining() -> void:

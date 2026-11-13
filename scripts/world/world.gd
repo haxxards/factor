@@ -94,7 +94,12 @@ func step(dt: float) -> void:
 		wire_layer.queue_redraw()
 	power.update(dt)
 	for b in buildings:
-		if not b is Belt:
+		if b is Belt:
+			continue
+		if b.is_broken():
+			b.status = ""  # the health line already says it is broken
+			b._on_broken()
+		else:
 			b.tick(dt)
 	for belt in belt_order:
 		belt.move_items(dt)
@@ -102,7 +107,7 @@ func step(dt: float) -> void:
 	if tick_count % 15 == 0:
 		# Lets idle buildings blink their status icons.
 		for b in buildings:
-			if not b is Belt and (b.drawn_icon != "" or b.status_icon() != ""):
+			if not b is Belt and (b.drawn_icon != "" or b.current_icon() != ""):
 				b.queue_redraw()
 
 
@@ -403,6 +408,8 @@ func build_demo() -> void:
 		_demo(&"inserter", x, 40, 2)
 		var furnace := _demo(&"furnace", x, 41) as Furnace
 		furnace.burner.add(&"coal", 40)
+		if x == 72:
+			furnace.health = furnace.max_health() * 0.55  # visibly worn
 		_demo(&"inserter", x, 43, 2)
 	for x in range(76, 64, -1):
 		_demo(&"belt", x, 44, 3)
@@ -414,7 +421,10 @@ func build_demo() -> void:
 	_demo(&"chest", 58, 46)
 
 	# Copper: burner drill -> furnace -> wire assembler -> circuit assembler.
-	(_demo(&"burner_drill", 82, 49, 3) as MiningDrill).burner.add(&"coal", 30)
+	var copper_drill := _demo(&"burner_drill", 82, 49, 3) as MiningDrill
+	copper_drill.burner.add(&"coal", 30)
+	# Nearly worn out: it breaks a few minutes in, to show the repair loop.
+	copper_drill.health = copper_drill.max_health() * 0.12
 	(_demo(&"furnace", 80, 49) as Furnace).burner.add(&"coal", 40)
 	_demo(&"inserter", 79, 50, 3)
 	(_demo(&"assembler", 76, 49) as Assembler).set_recipe(&"copper_wire")

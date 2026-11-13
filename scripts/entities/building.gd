@@ -16,6 +16,7 @@ var power_satisfaction := 0.0
 var status := ""
 var anim_time := 0.0
 var drawn_icon := ""  ## status icon at the last redraw, so a cleared icon gets erased
+var health := 0.0
 
 
 func setup(p_world: World, p_id: StringName, p_cell: Vector2i, p_dir: int) -> void:
@@ -27,6 +28,7 @@ func setup(p_world: World, p_id: StringName, p_cell: Vector2i, p_dir: int) -> vo
 	size = GameData.footprint(id, dir)
 	position = Vector2(cell * TILE) + Vector2(size * TILE) * 0.5
 	z_index = def.get("z", 1)
+	health = max_health()
 	_init_building()
 
 
@@ -58,6 +60,62 @@ func to_world_cell(local: Vector2i) -> Vector2i:
 
 func tick(_dt: float) -> void:
 	pass
+
+
+# --- Health ------------------------------------------------------------------
+
+func max_health() -> float:
+	return def.get("health", 100.0)
+
+
+func health_fraction() -> float:
+	return health / max_health()
+
+
+func is_damaged() -> bool:
+	return health < max_health()
+
+
+## Worn enough to flag on screen (light wear is only shown when hovered).
+func needs_repair() -> bool:
+	return health_fraction() < 0.75
+
+
+## Machines that wear out while working (and so need Repair Kits).
+func wears() -> bool:
+	return def.get("wears", false) and GameData.WEAR_SECONDS > 0.0
+
+
+## A broken machine does nothing until repaired.
+func is_broken() -> bool:
+	return health <= 0.0
+
+
+## Applies wear for `work_seconds` of full-speed work.
+func wear(work_seconds: float) -> void:
+	if wears() and work_seconds > 0.0:
+		health = maxf(0.0, health - max_health() * work_seconds / GameData.WEAR_SECONDS)
+
+
+## Restores up to `amount` health, returns how much was restored.
+func repair(amount: float) -> float:
+	var restored := minf(amount, max_health() - health)
+	health += restored
+	queue_redraw()
+	return restored
+
+
+## Called every tick instead of tick() while broken, to stop animations.
+func _on_broken() -> void:
+	pass
+
+
+func health_line() -> String:
+	if is_broken():
+		return "BROKEN - repair it with a Repair Kit"
+	if wears() or is_damaged():
+		return "Health: %d / %d" % [ceili(health), roundi(max_health())]
+	return ""
 
 
 # --- Power -------------------------------------------------------------------
@@ -182,6 +240,13 @@ func status_icon() -> String:
 	return ""
 
 
+## The icon actually shown: low health takes priority over other problems.
+func current_icon() -> String:
+	if wears() and health_fraction() <= 0.25:
+		return "repair"
+	return status_icon()
+
+
 ## Base sprite and overlay are drawn in north-facing local space and rotated
 ## as a whole, so overlays can use the same coordinates as the sprite.
 func _draw() -> void:
@@ -190,11 +255,26 @@ func _draw() -> void:
 	_draw_base()
 	_draw_overlay()
 	draw_set_transform(Vector2.ZERO)
+	_draw_health_bar()
 	_draw_status_icon()
 
 
+## Thin bar along the bottom edge, once noticeably worn.
+func _draw_health_bar() -> void:
+	if not needs_repair():
+		return
+	var w := size.x * TILE - 10.0
+	var top_left := Vector2(-w * 0.5, size.y * TILE * 0.5 - 7.0)
+	var f := health_fraction()
+	var color := Color(0.9, 0.25, 0.2).lerp(Color(0.95, 0.85, 0.25), clampf(f * 2.0, 0.0, 1.0))
+	if f > 0.5:
+		color = Color(0.95, 0.85, 0.25).lerp(Color(0.35, 0.85, 0.35), (f - 0.5) * 2.0)
+	draw_rect(Rect2(top_left - Vector2(1, 1), Vector2(w + 2, 5)), Color(0, 0, 0, 0.7))
+	draw_rect(Rect2(top_left, Vector2(w * f, 3)), color)
+
+
 func _draw_status_icon() -> void:
-	drawn_icon = status_icon()
+	drawn_icon = current_icon()
 	if drawn_icon != "" and fmod(Time.get_ticks_msec() / 1000.0, 1.0) < 0.6:
 		var tex := GameData.sprite("status_" + drawn_icon)
 		draw_texture(tex, -tex.get_size() * 0.5)

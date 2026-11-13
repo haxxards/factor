@@ -1,7 +1,7 @@
 extends Node
 ## Captures a screenshot of the running demo, for docs and visual checks.
 ##   godot --path . res://tools/screenshot.tscn -- --demo --out=shot.png --wait=6 --zoom=1.0 --at=68,46
-## Optional: --hold=belt --dir=1 --mouse=x,y --inventory --help --open=x,y --menu (no --demo)
+## Optional: --hold=belt --dir=1 --mouse=x,y --inventory --help --open=x,y --damage=x,y,fraction --menu (no --demo)
 ## Needs a real display (or xvfb-run); it does not work with --headless.
 
 func _ready() -> void:
@@ -22,6 +22,10 @@ func _ready() -> void:
 	if args.has("hold"):
 		game.set_hand(StringName(args["hold"]))
 		game.hand_dir = int(args.get("dir", "1"))
+	if args.has("damage"):
+		var d: PackedStringArray = args["damage"].split(",")
+		var target := game.world.get_building(Vector2i(int(d[0]), int(d[1])))
+		target.health = target.max_health() * float(d[2])
 	if args.has("help"):
 		game.hud.toggle_help()
 	if args.has("inventory"):

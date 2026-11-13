@@ -52,8 +52,14 @@ func tick(dt: float) -> void:
 	else:
 		status = "Running"
 	anim_time += dt * clampf(output_power / def["max_power"], 0.0, 1.0) * 2.0
+	wear(dt * output_power / def["max_power"])
 	if output_power > 0.0:
 		queue_redraw()
+
+
+func _on_broken() -> void:
+	output_power = 0.0
+	_generated = 0.0
 
 
 func ui_lines() -> PackedStringArray:

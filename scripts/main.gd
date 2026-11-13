@@ -20,10 +20,12 @@ var player: Player
 var camera: Camera2D
 var hud: Hud
 var preview: BuildPreview
+var hotbar := HotbarLayout.new()
 
 var started := false
 var hand_item: StringName = &""  ## building or tool in the hand, &"" for an empty hand
 var hand_dir := 0
+var hand_slot := -1  ## hotbar slot the hand was filled from, or -1
 var mouse_cell := Vector2i.ZERO
 var mine_target := World.NO_CELL
 var mine_progress := 0.0  ## 0..1 for the current hand-mining action
@@ -36,6 +38,8 @@ var _repairing := false
 
 
 func _ready() -> void:
+	hotbar.load_saved()
+	hotbar.changed.connect(_on_hotbar_changed)
 	world = World.new()
 	world.name = "World"
 	world.auto_tick = false
@@ -110,11 +114,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.toggle_help()
 	elif event.is_action_pressed(&"close"):
 		if not hud.close_top_window():
-			hand_item = &""
+			set_hand(&"")
 	elif event.is_action_pressed(&"cheat"):
 		_cheat()
 	else:
-		for i in GameData.HOTBAR.size():
+		for i in hotbar.size():
 			if event.is_action_pressed(StringName("hotbar_%d" % i)):
 				select_hotbar(i)
 				break
@@ -149,15 +153,28 @@ func _zoom(factor: float) -> void:
 
 # --- Hand / placing ----------------------------------------------------------
 
+## Forget which slot the hand came from once that slot holds something else.
+func _on_hotbar_changed() -> void:
+	if hand_slot >= 0 and hotbar.get_item(hand_slot) != hand_item:
+		hand_slot = -1
+
+
+## Selects whatever is in slot i; selecting the same slot again (or an empty
+## slot) empties the hand.
 func select_hotbar(i: int) -> void:
-	var id: StringName = GameData.HOTBAR[i]
-	set_hand(&"" if hand_item == id else id)
+	var id := hotbar.get_item(i)
+	if id == &"" or (hand_item == id and hand_slot == i):
+		set_hand(&"")
+		return
+	set_hand(id)
+	hand_slot = i
 
 
 func set_hand(id: StringName) -> void:
 	if id != &"" and not (GameData.is_building_item(id) or GameData.is_tool(id)):
 		return
 	hand_item = id
+	hand_slot = -1
 	if id != &"" and player.inventory.count(id) <= 0:
 		hud.toast("No %s in inventory - craft some first (E)" % GameData.item_name(id))
 
@@ -236,7 +253,7 @@ func _rotate(steps: int) -> void:
 func _pipette() -> void:
 	var b := world.get_building(mouse_cell)
 	if hand_item != &"" or b == null:
-		hand_item = &""
+		set_hand(&"")
 		return
 	set_hand(b.id)
 	hand_dir = b.dir
@@ -302,7 +319,7 @@ func pick_up(b: Building) -> void:
 
 
 func _cheat() -> void:
-	for id in GameData.HOTBAR:
+	for id in GameData.BUILDINGS.keys() + [&"repair_kit"]:
 		player.inventory.force_add(id, 20)
 	for id in [&"iron_plate", &"copper_plate", &"coal", &"stone", &"iron_gear", &"circuit"]:
 		player.inventory.force_add(id, 100)

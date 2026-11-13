@@ -77,6 +77,11 @@ use a circuit, a gear and a plate, and boilers need stone bricks, so you have to
   stays damaged when you place it again, so picking it up isn't a free repair. In the demo, the
   copper burner drill starts nearly worn out and breaks after a few minutes. Set `WEAR_SECONDS`
   in `game_data.gd` to change the wear rate, or to 0 to turn wear off.
+- **Hotbar:** 13 slots on keys 1–0, `-`, `=` and F. It starts with every building plus the
+  Repair Kit on F. Drag any building or the Repair Kit onto a slot from the inventory or the
+  crafting list (so you can slot something before you've made one). The same item can sit in
+  several slots. Drag slots onto each other to swap them, and right-click a slot or drag it off
+  the bar to clear it. The layout is saved to `user://settings.cfg` and comes back next launch.
 - **Feedback:** Machines blink an icon when they are out of fuel, power or ingredients. Hover
   over anything to see its status, and use the objectives panel to follow the progression.
 
@@ -86,8 +91,9 @@ use a circuit, a gear and a plate, and boilers need stone bricks, so you have to
 |---|---|
 | WASD / arrow keys | Walk |
 | Mouse wheel | Zoom |
-| 1 – 0, `-`, `=` | Pick a building from the hotbar |
-| F | Hold a Repair Kit |
+| 1 – 0, `-`, `=`, F | Use that hotbar slot. Pressing the same slot again empties your hand |
+| Drag onto the hotbar | Fill a slot from the inventory or crafting list (E). Drag slot onto slot to swap |
+| Right-click a slot / drag it off the bar | Clear that slot |
 | Left click | Place (hold and drag to lay a belt line) / open a building. With a Repair Kit, hold to repair |
 | Right click (hold) | Mine ore by hand, or pick up a building along with its contents |
 | R / Shift+R | Rotate the held building, or the hovered one |
@@ -106,6 +112,7 @@ scripts/
   main.gd                   game controller: input, placing, mining, start menu flow
   core/game_data.gd         autoload: items, recipes, buildings, input map, stats
   core/inventory.gd         slot-limited item storage
+  core/hotbar_layout.gd     the player's hotbar slots, saved to user settings
   core/burner_fuel.gd       fuel slot used by burner drill, furnace, boiler
   world/world.gd            map generation, placement rules, simulation tick, demo layout
   world/*_renderer.gd …     batched drawing for belts, belt items and wires
@@ -127,8 +134,8 @@ script in `scripts/entities/` that extends `Building`, and add a sprite.
 ## Tests
 
 The simulation runs headless. It is covered by tests for belts (movement, compression, curves,
-side-loading), inserter → furnace → chest chains, fluid rules, recursive hand crafting, and wear
-and repair. There is also a 2-minute run of the demo factory that checks power, fuel, gears and
+side-loading), inserter → furnace → chest chains, fluid rules, recursive hand crafting, wear
+and repair, and the hotbar (slotting, swapping, clearing, saving). There is also a 2-minute run of the demo factory that checks power, fuel, gears and
 circuits.
 
 ```bash

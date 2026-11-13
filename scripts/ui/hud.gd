@@ -16,6 +16,8 @@ var mining_bar: ProgressBar
 var queue_row: HBoxContainer
 var queue_bar: ProgressBar
 var hotbar_buttons: Array[Button] = []
+var _hotbar_items: Array[StringName] = []  ## what each slot button currently shows
+var _drag: Variant = null  ## data of the drag in progress, to spot drops off the bar
 
 var inventory_window: PanelContainer
 var inv_grid: GridContainer
@@ -230,17 +232,19 @@ func _build_hotbar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	p.add_child(row)
-	for i in GameData.HOTBAR.size():
-		var id: StringName = GameData.HOTBAR[i]
-		var b := _item_button(id, 0, 52)
+	for i in game.hotbar.size():
+		var b := _item_button(&"", 0, 52)
 		b.toggle_mode = true
 		b.pressed.connect(game.select_hotbar.bind(i))
+		b.gui_input.connect(_on_hotbar_gui_input.bind(i))
+		b.set_drag_forwarding(_hotbar_drag.bind(i), _hotbar_can_drop, _hotbar_drop.bind(i))
 		var key := _label(GameData.HOTBAR_KEYS[i], 11, Color(1, 1, 1, 0.6))
 		key.position = Vector2(4, 1)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(key)
 		row.add_child(b)
 		hotbar_buttons.append(b)
+		_hotbar_items.append(&"-")  # forces the first refresh
 
 	var hint := _label("H: help   E: inventory & crafting   F9: sandbox items", 12, Color(1, 1, 1, 0.55))
 	root.add_child(hint)
@@ -259,7 +263,7 @@ func _build_inventory_window() -> void:
 	v.add_child(h)
 
 	var left := VBoxContainer.new()
-	left.add_child(_label("Inventory - click a building to hold it", 12, Color(0.7, 0.7, 0.7)))
+	left.add_child(_label("Inventory - click to hold, drag onto the hotbar to add", 12, Color(0.7, 0.7, 0.7)))
 	inv_grid = GridContainer.new()
 	inv_grid.columns = 8
 	inv_grid.custom_minimum_size = Vector2(8 * (SLOT + 4), SLOT * 2)
@@ -268,7 +272,7 @@ func _build_inventory_window() -> void:
 	h.add_child(VSeparator.new())
 
 	var right := VBoxContainer.new()
-	right.add_child(_label("Hand crafting - click: 1, shift+click: 5", 12, Color(0.7, 0.7, 0.7)))
+	right.add_child(_label("Hand crafting - click: 1, shift+click: 5, drag to hotbar", 12, Color(0.7, 0.7, 0.7)))
 	craft_grid = GridContainer.new()
 	craft_grid.columns = 6
 	right.add_child(craft_grid)
@@ -277,6 +281,7 @@ func _build_inventory_window() -> void:
 		var b := _item_button(r, 0)
 		b.tooltip_text = GameData.tooltip(r)
 		b.pressed.connect(_on_craft_pressed.bind(r))
+		_make_draggable(b, r)
 		craft_grid.add_child(b)
 		craft_buttons[r] = b
 
@@ -319,7 +324,8 @@ func _build_help() -> void:
 	var text := _rich(640)
 	text.text = """[b]Controls[/b]
 WASD / arrows - walk          Mouse wheel - zoom
-1-0, -, = - pick a building from the hotbar (or click it)      F - hold a Repair Kit
+1-0, -, =, F - use that hotbar slot (or click it). Drag items from the inventory (E) onto the
+hotbar to fill slots, drag slots to swap them, right-click or drag a slot off the bar to clear it
 Left click - place (hold and drag for belt lines) / open a building
 Right click (hold) - mine ore by hand, or pick a building back up
 R / Shift+R - rotate the held building (or the hovered one)
@@ -515,11 +521,87 @@ func _process(delta: float) -> void:
 func _update_hotbar() -> void:
 	var inv := game.player.inventory
 	for i in hotbar_buttons.size():
-		var id: StringName = GameData.HOTBAR[i]
+		var id := game.hotbar.get_item(i)
 		var b := hotbar_buttons[i]
-		(b.get_node("Count") as Label).text = str(inv.count(id))
-		b.set_pressed_no_signal(game.hand_item == id)
-		b.modulate = Color.WHITE if inv.count(id) > 0 else Color(1, 1, 1, 0.45)
+		if _hotbar_items[i] != id:
+			_hotbar_items[i] = id
+			b.icon = GameData.icon(id) if id != &"" else null
+			if id == &"":
+				b.tooltip_text = "Empty slot (%s)\nDrag a building or Repair Kit here from the inventory (E)" % GameData.HOTBAR_KEYS[i]
+			else:
+				b.tooltip_text = "%s\n\nKey %s. Drag onto another slot to swap; right-click or drag off the bar to clear." % [
+					GameData.tooltip(id), GameData.HOTBAR_KEYS[i]]
+		(b.get_node("Count") as Label).text = str(inv.count(id)) if id != &"" else ""
+		# Highlight only the slot the hand came from, so duplicates don't all light up.
+		var held := id != &"" and game.hand_item == id and (game.hand_slot == i or game.hand_slot < 0)
+		b.set_pressed_no_signal(held)
+		b.modulate = Color.WHITE if id == &"" or inv.count(id) > 0 else Color(1, 1, 1, 0.45)
+	_track_drag()
+
+
+# --- Hotbar drag and drop ----------------------------------------------------
+
+## Lets an item button be dragged onto the hotbar (buildings and tools only).
+func _make_draggable(b: Button, item: StringName) -> void:
+	if HotbarLayout.can_hold(item):
+		b.set_drag_forwarding(_item_drag.bind(b, item), Callable(), Callable())
+
+
+func _item_drag(_at: Vector2, b: Button, item: StringName) -> Variant:
+	b.set_drag_preview(_drag_preview(item))
+	return {"hotbar_item": item}
+
+
+func _hotbar_drag(_at: Vector2, i: int) -> Variant:
+	var item := game.hotbar.get_item(i)
+	if item == &"":
+		return null
+	hotbar_buttons[i].set_drag_preview(_drag_preview(item))
+	return {"hotbar_item": item, "from_slot": i}
+
+
+func _hotbar_can_drop(_at: Vector2, data: Variant) -> bool:
+	return data is Dictionary and data.has("hotbar_item")
+
+
+func _hotbar_drop(_at: Vector2, data: Variant, i: int) -> void:
+	if data.has("from_slot"):
+		game.hotbar.swap(data["from_slot"], i)
+	else:
+		game.hotbar.assign(i, data["hotbar_item"])
+
+
+func _drag_preview(item: StringName) -> Control:
+	var t := TextureRect.new()
+	t.texture = GameData.icon(item)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.size = Vector2(40, 40)
+	t.position = -t.size * 0.5
+	t.modulate.a = 0.85
+	var holder := Control.new()  # centres the icon on the cursor
+	holder.add_child(t)
+	return holder
+
+
+## A slot dragged and dropped anywhere that isn't another slot is cleared.
+func _track_drag() -> void:
+	var vp := get_viewport()
+	if vp.gui_is_dragging():
+		_drag = vp.gui_get_drag_data()
+	elif _drag != null:
+		if _drag is Dictionary and _drag.has("from_slot") and not vp.gui_is_drag_successful():
+			game.hotbar.clear(_drag["from_slot"])
+		_drag = null
+
+
+func _on_hotbar_gui_input(event: InputEvent, i: int) -> void:
+	var mb := event as InputEventMouseButton
+	if mb and mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT:
+		var was_held := game.hand_slot == i
+		game.hotbar.clear(i)
+		if was_held:
+			game.set_hand(&"")
+		get_viewport().set_input_as_handled()
 
 
 func _update_info() -> void:
@@ -587,6 +669,7 @@ func _rebuild_inventory() -> void:
 	for item in inv.sorted_items():
 		var b := _item_button(item, inv.count(item))
 		b.pressed.connect(_on_inventory_item_pressed.bind(item))
+		_make_draggable(b, item)
 		inv_grid.add_child(b)
 	for r in craft_buttons:
 		var n := game.player.craftable_count(r)

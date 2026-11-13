@@ -115,8 +115,8 @@ const BUILDINGS := {
 		"supply": 3, "reach": 8.0, "sprite_offset": Vector2(0, -12), "health": 100.0},
 }
 
-## Order of the hotbar (keys 1-0, -, =, F).
-const HOTBAR := [&"belt", &"inserter", &"burner_drill", &"electric_drill", &"furnace", &"chest",
+## Starting hotbar layout (keys 1-0, -, =, F). Players can rearrange it; see HotbarLayout.
+const DEFAULT_HOTBAR := [&"belt", &"inserter", &"burner_drill", &"electric_drill", &"furnace", &"chest",
 	&"pole", &"pipe", &"pump", &"boiler", &"steam_engine", &"assembler", &"repair_kit"]
 const HOTBAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "F"]
 

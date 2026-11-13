@@ -16,6 +16,7 @@ func _ready() -> void:
 	_test_fluid_conflict()
 	_test_handcrafting()
 	_test_wear_and_repair()
+	_test_hotbar()
 	_test_demo_factory()
 	print("")
 	if _failures == 0:
@@ -215,6 +216,61 @@ func _test_wear_and_repair() -> void:
 	_check(p.worn_count(&"furnace") == 0, "the damage record is dropped once the item leaves the inventory")
 	p.queue_free()
 	w.queue_free()
+
+
+func _test_hotbar() -> void:
+	print("Customisable hotbar")
+	var path := "user://test_settings.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var bar := HotbarLayout.new(path)
+	_check(bar.get_item(0) == &"belt" and bar.get_item(12) == &"repair_kit", "starts with the default layout")
+	_check(bar.assign(5, &"belt") and bar.get_item(0) == &"belt", "the same item can sit in two slots")
+	_check(not bar.assign(1, &"iron_plate") and bar.get_item(1) == &"inserter", "materials can't be slotted")
+	bar.swap(0, 1)
+	_check(bar.get_item(0) == &"inserter" and bar.get_item(1) == &"belt", "slots swap")
+	bar.clear(2)
+	_check(bar.get_item(2) == &"", "a slot can be cleared")
+	var reloaded := HotbarLayout.new(path)
+	reloaded.load_saved()
+	_check(reloaded.slots == bar.slots, "the layout is saved and loaded back")
+	var cfg := ConfigFile.new()
+	cfg.load(path)
+	cfg.set_value(HotbarLayout.SECTION, HotbarLayout.KEY, PackedStringArray(["no_such_item", "pipe"]))
+	cfg.save(path)
+	reloaded.load_saved()
+	_check(reloaded.get_item(0) == &"" and reloaded.get_item(1) == &"pipe", "unknown saved items become empty slots")
+
+	# Drive the real game scene and HUD handlers, with the layout in the test file.
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var game: Game = load("res://scenes/main.tscn").instantiate()
+	game.hotbar = HotbarLayout.new(path)
+	add_child(game)
+	game.select_hotbar(0)
+	_check(game.hand_item == &"belt" and game.hand_slot == 0, "a slot key selects what is slotted there")
+	game.select_hotbar(0)
+	_check(game.hand_item == &"", "pressing the same slot again empties the hand")
+	game.hotbar.assign(4, &"belt")
+	game.select_hotbar(4)
+	game.select_hotbar(0)
+	_check(game.hand_item == &"belt" and game.hand_slot == 0, "switching between duplicate slots keeps the item")
+	var hud := game.hud
+	_check(hud._hotbar_can_drop(Vector2.ZERO, {"hotbar_item": &"pipe"}) and not hud._hotbar_can_drop(Vector2.ZERO, "x"),
+		"slots accept only hotbar drags")
+	hud._hotbar_drop(Vector2.ZERO, {"hotbar_item": &"pipe"}, 2)
+	_check(game.hotbar.get_item(2) == &"pipe", "dropping an inventory item fills the slot")
+	hud._hotbar_drop(Vector2.ZERO, {"hotbar_item": &"pipe", "from_slot": 2}, 6)
+	_check(game.hotbar.get_item(6) == &"pipe" and game.hotbar.get_item(2) == &"pole", "dragging slot onto slot swaps them")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_RIGHT
+	click.pressed = true
+	hud._on_hotbar_gui_input(click, 0)
+	_check(game.hotbar.get_item(0) == &"" and game.hand_item == &"", "right-click clears a slot (and the hand it filled)")
+	game.select_hotbar(0)
+	_check(game.hand_item == &"", "an empty slot's key leaves the hand empty")
+	hud._process(0.016)
+	_check(hud.hotbar_buttons[0].icon == null and hud.hotbar_buttons[6].icon == GameData.icon(&"pipe"), "slot buttons show the new layout")
+	game.queue_free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _test_demo_factory() -> void:
